@@ -1,0 +1,27 @@
+{
+  "name": "result-visual",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/akshitasrivastava20/result-visual.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/akshitasrivastava20/result-visual/issues"
+  },
+  "homepage": "https://github.com/akshitasrivastava20/result-visual#readme",
+  "dependencies": {
+    "@google/genai": "^1.45.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "hono": "^4.12.7"
+  }
+}
