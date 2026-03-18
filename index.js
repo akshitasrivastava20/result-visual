@@ -3,7 +3,6 @@ import { cors } from 'hono/cors';
 
 const app = new Hono();
 
-// Enable CORS so your frontend can actually fetch the data
 app.use('/api/*', cors());
 
 const DATA_WORKER_BASE = "https://singularity-server.devxoshakya.workers.dev";
@@ -23,24 +22,35 @@ const analyticsTools = [{
 }];
 
 app.get('/api/query', async (c) => {
-  const userQuery = c.req.query('text');
-  // In Cloudflare Workers, secrets are in c.env
+  // Normalize the query so minor differences in typing don't bypass the cache
+  const rawQuery = c.req.query('text');
+  if (!rawQuery) return c.json({ error: "Missing ?text=" }, 400);
+  
+  const userQuery = rawQuery.trim().toLowerCase();
   const apiKey = c.env.GEMINI_API_KEY;
-
-  if (!userQuery) return c.json({ error: "Missing ?text=" }, 400);
-
-  const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const KV = c.env.ANALYTICS_CACHE; // This must match your wrangler.toml binding
 
   try {
+    // --- STEP 1: CHECK KV CACHE ---
+    const cachedData = await KV.get(userQuery);
+    if (cachedData) {
+      console.log("Serving from Cache");
+      return c.json({
+        ...JSON.parse(cachedData),
+        cached: true
+      });
+    }
+
+    // --- STEP 2: CACHE MISS, CALL GEMINI ---
+    // Using 1.5-flash-8b for faster routing performance
+    const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     const aiResponse = await fetch(GEMINI_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: userQuery }] }],
         tools: analyticsTools,
-        toolConfig: {
-          functionCallingConfig: { mode: "ANY" }
-        },
+        toolConfig: { functionCallingConfig: { mode: "ANY" } },
         generationConfig: { temperature: 0 }
       })
     });
@@ -66,21 +76,55 @@ app.get('/api/query', async (c) => {
       get_top_performers: "/api/analytics/top-performers"
     };
 
+    // --- STEP 3: FETCH DATA FROM DATA WORKER ---
     const finalDataUrl = `${DATA_WORKER_BASE}${apiMap[name]}?${new URLSearchParams(args).toString()}`;
-    
-    // Fetch from your Data Worker
     const workerResponse = await fetch(finalDataUrl);
     const resultData = await workerResponse.json();
 
-    return c.json({
+    const finalPayload = {
       intent: name,
       params: args,
-      data: resultData.data || resultData
-    });
+      data: resultData.data || resultData,
+      cached: false
+    };
+
+    // --- STEP 4: SAVE TO KV IN BACKGROUND ---
+    // expirationTtl: 3600 keeps it cached for 1 hour
+    c.executionCtx.waitUntil(
+      KV.put(userQuery, JSON.stringify(finalPayload), { expirationTtl: 5184000 })
+    );
+
+    return c.json(finalPayload);
 
   } catch (err) {
     return c.json({ error: "Processing Error", detail: err.message }, 500);
   }
 });
 
+// --- SECRET PURGE ENDPOINT ---
+app.get('/api/admin/clear-cache', async (c) => {
+  // 1. Security Check: Only you should be able to do this!
+  const password = c.req.query('pass');
+  if (password !== "bubududu") { 
+    return c.json({ error: "Unauthorized" }, 401); 
+  }
+
+  const KV = c.env.ANALYTICS_CACHE;
+
+  try {
+    // 2. Fetch the list of all keys currently in your KV
+    const list = await KV.list();
+    
+    // 3. Loop through and delete each one
+    const deletePromises = list.keys.map(key => KV.delete(key.name));
+    await Promise.all(deletePromises);
+
+    return c.json({ 
+      success: true, 
+      message: `Purged ${list.keys.length} cached items.` 
+    });
+  } catch (err) {
+    return c.json({ error: "Purge failed", detail: err.message }, 500);
+  }
+});
 export default app;

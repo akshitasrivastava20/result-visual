@@ -4,3 +4,6 @@ compatibility_date = "2026-03-13"
 
 [vars]
 # Local development keys go here, but use secrets for production!
+[[kv_namespaces]]
+binding = "ANALYTICS_CACHE"
+id = "74d480370ceb420698c1ddb8f2a41d13"
