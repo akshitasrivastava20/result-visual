@@ -22,27 +22,21 @@ const analyticsTools = [{
 }];
 
 app.get('/api/query', async (c) => {
-  // Normalize the query so minor differences in typing don't bypass the cache
   const rawQuery = c.req.query('text');
   if (!rawQuery) return c.json({ error: "Missing ?text=" }, 400);
   
   const userQuery = rawQuery.trim().toLowerCase();
   const apiKey = c.env.GEMINI_API_KEY;
-  const KV = c.env.ANALYTICS_CACHE; // This must match your wrangler.toml binding
+  const KV = c.env.ANALYTICS_CACHE;
 
   try {
     // --- STEP 1: CHECK KV CACHE ---
     const cachedData = await KV.get(userQuery);
     if (cachedData) {
-      console.log("Serving from Cache");
-      return c.json({
-        ...JSON.parse(cachedData),
-        cached: true
-      });
+      return c.json({ ...JSON.parse(cachedData), cached: true });
     }
 
-    // --- STEP 2: CACHE MISS, CALL GEMINI ---
-    // Using 1.5-flash-8b for faster routing performance
+    // --- STEP 2: CALL GEMINI ---
     const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     const aiResponse = await fetch(GEMINI_ENDPOINT, {
       method: 'POST',
@@ -64,6 +58,11 @@ app.get('/api/query', async (c) => {
 
     const { name, args } = toolCallPart.functionCall;
 
+    // --- CRITICAL UPDATE: NORMALIZE BRANCH TO UPPERCASE ---
+    if (args && typeof args.branch === 'string') {
+      args.branch = args.branch.toUpperCase();
+    }
+
     const apiMap = {
       get_student_status: "/api/analytics/student-status-distribution",
       get_branch_breakdown: "/api/analytics/branch-status-breakdown",
@@ -76,7 +75,7 @@ app.get('/api/query', async (c) => {
       get_top_performers: "/api/analytics/top-performers"
     };
 
-    // --- STEP 3: FETCH DATA FROM DATA WORKER ---
+    // --- STEP 3: FETCH DATA ---
     const finalDataUrl = `${DATA_WORKER_BASE}${apiMap[name]}?${new URLSearchParams(args).toString()}`;
     const workerResponse = await fetch(finalDataUrl);
     const resultData = await workerResponse.json();
@@ -88,8 +87,7 @@ app.get('/api/query', async (c) => {
       cached: false
     };
 
-    // --- STEP 4: SAVE TO KV IN BACKGROUND ---
-    // expirationTtl: 3600 keeps it cached for 1 hour
+    // --- STEP 4: SAVE TO KV ---
     c.executionCtx.waitUntil(
       KV.put(userQuery, JSON.stringify(finalPayload), { expirationTtl: 5184000 })
     );
@@ -101,30 +99,20 @@ app.get('/api/query', async (c) => {
   }
 });
 
-// --- SECRET PURGE ENDPOINT ---
+// --- ADMIN PURGE ---
 app.get('/api/admin/clear-cache', async (c) => {
-  // 1. Security Check: Only you should be able to do this!
   const password = c.req.query('pass');
-  if (password !== "bubududu") { 
-    return c.json({ error: "Unauthorized" }, 401); 
-  }
+  if (password !== "bubududu") return c.json({ error: "Unauthorized" }, 401); 
 
   const KV = c.env.ANALYTICS_CACHE;
-
   try {
-    // 2. Fetch the list of all keys currently in your KV
     const list = await KV.list();
-    
-    // 3. Loop through and delete each one
     const deletePromises = list.keys.map(key => KV.delete(key.name));
     await Promise.all(deletePromises);
-
-    return c.json({ 
-      success: true, 
-      message: `Purged ${list.keys.length} cached items.` 
-    });
+    return c.json({ success: true, message: `Purged ${list.keys.length} items.` });
   } catch (err) {
     return c.json({ error: "Purge failed", detail: err.message }, 500);
   }
 });
+
 export default app;

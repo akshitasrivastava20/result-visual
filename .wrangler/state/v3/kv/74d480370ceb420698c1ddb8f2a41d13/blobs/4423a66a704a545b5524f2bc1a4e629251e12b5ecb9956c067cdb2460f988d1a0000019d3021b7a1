@@ -1,1 +1,0 @@
-{"intent":"get_student_status","params":{"year":3},"data":{"total":1249,"distribution":[{"status":"Pass","count":636,"percentage":50.92073658927142,"fill":"var(--chart-1)"},{"status":"PCP","count":357,"percentage":28.582866293034424,"fill":"var(--chart-2)"},{"status":"Fail","count":256,"percentage":20.496397117694155,"fill":"var(--chart-3)"}]},"cached":false}
