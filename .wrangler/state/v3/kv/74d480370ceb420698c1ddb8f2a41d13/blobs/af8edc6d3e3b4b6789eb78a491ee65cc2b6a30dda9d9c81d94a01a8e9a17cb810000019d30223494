@@ -1,0 +1,1 @@
+{"intent":"get_student_status","params":{"branch":"CSE","year":3},"data":{"total":409,"distribution":[{"status":"Pass","count":277,"percentage":67.72616136919315,"fill":"var(--chart-1)"},{"status":"PCP","count":82,"percentage":20.048899755501225,"fill":"var(--chart-2)"},{"status":"Fail","count":50,"percentage":12.224938875305623,"fill":"var(--chart-3)"}]},"cached":false}

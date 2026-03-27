@@ -1,0 +1,1 @@
+{"intent":"get_student_status","params":{"year":3,"branch":"cse"},"data":{"total":0,"distribution":[{"status":"Pass","count":0,"percentage":0,"fill":"var(--chart-1)"},{"status":"PCP","count":0,"percentage":0,"fill":"var(--chart-2)"},{"status":"Fail","count":0,"percentage":0,"fill":"var(--chart-3)"}]},"cached":false}
